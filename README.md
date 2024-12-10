@@ -97,12 +97,12 @@ Here’s how you can deploy GPT-Neo with minimal setup:
 
 Prepare Deployment Files
     deployment.yaml:
-
 ```
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: gpt-neo
+  namespace: gpt-neo
 spec:
   replicas: 1
   selector:
@@ -116,14 +116,67 @@ spec:
       containers:
       - name: gpt-neo
         image: huggingface/transformers-pytorch-cpu:latest
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "1"
+          limits:
+            memory: "8Gi"
+            cpu: "2"
+        env:
+          - name: HUGGINGFACE_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: huggingface-token
+                key: token
         ports:
         - containerPort: 8000
-        command: ["python"]
-        args: ["-m", "transformers.huggingface", "serve", "--model", "EleutherAI/gpt-n
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            echo "Installing dependencies..."
+            pip install --upgrade transformers torch huggingface_hub uvicorn fastapi &&
+            echo "Dependencies installed" &&
+            export HF_DATASETS_CACHE="/tmp/huggingface" &&
+            export TRANSFORMERS_CACHE="/tmp/huggingface" &&
+            export HUGGINGFACE_HUB_CACHE="/tmp/huggingface" &&
+            mkdir -p /tmp/huggingface &&
+            echo "Starting application..." &&
+            python3 -c '
+            import os
+            from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
+            import uvicorn
+            from fastapi import FastAPI
+            
+            token = os.environ.get("HUGGINGFACE_TOKEN")
+            if not token:
+                raise ValueError("No Hugging Face token found in environment")
+                
+            app = FastAPI()
+            print("Loading model...")
+            print(f"Using token: {token[:8]}...")
+            model = AutoModelForCausalLM.from_pretrained("gpt2", use_auth_token=token)
+            tokenizer = AutoTokenizer.from_pretrained("gpt2", use_auth_token=token)
+            generator = pipeline("text-generation", model=model, tokenizer=tokenizer)
+            print("Model loaded successfully")
+            
+            @app.get("/generate")
+            async def generate_text(prompt: str):
+                result = generator(prompt, max_length=50, num_return_sequences=1)
+                return result[0]
+            
+            if __name__ == "__main__":
+                uvicorn.run(app, host="0.0.0.0", port=8000)
+            '
+        volumeMounts:
+        - name: cache-volume
+          mountPath: /tmp/huggingface
+      volumes:
+      - name: cache-volume
+        emptyDir:
+          sizeLimit: 5Gi
 ```
-
     service.yaml:
-
 ```
 apiVersion: v1
 kind: Service
@@ -137,6 +190,11 @@ spec:
       port: 80
       targetPort: 8000
   type: LoadBalancer
+```
+
+Set token:
+```
+kubectl create secret generic huggingface-token -n gpt-neo --from-literal=token=${HUGGING_FACES_TOKEN}
 ```
 
 ### Deploy to Kubernetes
