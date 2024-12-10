@@ -16,22 +16,49 @@ spec:
       containers:
       - name: gpt-neo
         image: huggingface/transformers-pytorch-cpu:latest
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "1"
+          limits:
+            memory: "8Gi"
+            cpu: "2"
+        env:
+          - name: HUGGINGFACE_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: huggingface-token
+                key: token
         ports:
         - containerPort: 8000
         command: ["/bin/sh", "-c"]
         args:
           - |
-            pip install uvicorn fastapi
+            echo "Installing dependencies..."
+            pip install --upgrade transformers torch huggingface_hub uvicorn fastapi &&
+            echo "Dependencies installed" &&
+            export HF_DATASETS_CACHE="/tmp/huggingface" &&
+            export TRANSFORMERS_CACHE="/tmp/huggingface" &&
+            export HUGGINGFACE_HUB_CACHE="/tmp/huggingface" &&
+            mkdir -p /tmp/huggingface &&
+            echo "Starting application..." &&
             python3 -c '
+            import os
             from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
-            from transformers import pipeline
             import uvicorn
             from fastapi import FastAPI
             
+            token = os.environ.get("HUGGINGFACE_TOKEN")
+            if not token:
+                raise ValueError("No Hugging Face token found in environment")
+                
             app = FastAPI()
-            model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-neo-125M")
-            tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neo-125M")
+            print("Loading model...")
+            print(f"Using token: {token[:8]}...")
+            model = AutoModelForCausalLM.from_pretrained("gpt2", use_auth_token=token)
+            tokenizer = AutoTokenizer.from_pretrained("gpt2", use_auth_token=token)
             generator = pipeline("text-generation", model=model, tokenizer=tokenizer)
+            print("Model loaded successfully")
             
             @app.get("/generate")
             async def generate_text(prompt: str):
@@ -41,3 +68,10 @@ spec:
             if __name__ == "__main__":
                 uvicorn.run(app, host="0.0.0.0", port=8000)
             '
+        volumeMounts:
+        - name: cache-volume
+          mountPath: /tmp/huggingface
+      volumes:
+      - name: cache-volume
+        emptyDir:
+          sizeLimit: 5Gi
