@@ -18,5 +18,26 @@ spec:
         image: huggingface/transformers-pytorch-cpu:latest
         ports:
         - containerPort: 8000
-        command: ["python"]
-        args: ["-m", "transformers.huggingface", "serve", "--model", "EleutherAI/gpt-neo-1.3B"]
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            pip install uvicorn fastapi
+            python3 -c '
+            from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
+            from transformers import pipeline
+            import uvicorn
+            from fastapi import FastAPI
+            
+            app = FastAPI()
+            model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-neo-125M")
+            tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neo-125M")
+            generator = pipeline("text-generation", model=model, tokenizer=tokenizer)
+            
+            @app.get("/generate")
+            async def generate_text(prompt: str):
+                result = generator(prompt, max_length=50, num_return_sequences=1)
+                return result[0]
+            
+            if __name__ == "__main__":
+                uvicorn.run(app, host="0.0.0.0", port=8000)
+            '
