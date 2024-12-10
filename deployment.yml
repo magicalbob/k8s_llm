@@ -19,4 +19,4 @@ spec:
         ports:
         - containerPort: 8000
         command: ["python"]
-        args: ["-m", "transformers.huggingface", "serve", "--model", "EleutherAI/gpt-n
+        args: ["-m", "transformers.huggingface", "serve", "--model", "EleutherAI/gpt-neo-1.3B"]
