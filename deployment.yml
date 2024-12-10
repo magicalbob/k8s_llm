@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gpt-neo
+  namespace: gpt-neo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gpt-neo
+  template:
+    metadata:
+      labels:
+        app: gpt-neo
+    spec:
+      containers:
+      - name: gpt-neo
+        image: huggingface/transformers-pytorch-cpu:latest
+        ports:
+        - containerPort: 8000
+        command: ["python"]
+        args: ["-m", "transformers.huggingface", "serve", "--model", "EleutherAI/gpt-n
