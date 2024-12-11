@@ -96,6 +96,7 @@ Pull an appropriate Docker image: huggingface/transformers-pytorch-gpu or cpu va
 Here’s how you can deploy GPT-Neo with minimal setup:
 
 Prepare Deployment Files
+
 [deployment.yml](./deployment.yml)
 
 [service.yml](./service.yml)
